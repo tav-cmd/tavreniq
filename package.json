@@ -1,0 +1,1 @@
+{"name":"tavreniq","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22.13.0"},"scripts":{"start":"node --env-file-if-exists=.env src/index.js","register":"node --env-file-if-exists=.env src/register.js","test":"node --test","check":"node --check src/index.js && node --check src/moderation.js && node --check src/ai.js"},"dependencies":{"discord.js":"14.27.0"}}
