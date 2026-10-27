@@ -1,4 +1,4 @@
-import {Client,GatewayIntentBits as I,Events,MessageFlags,PermissionFlagsBits as P} from 'discord.js';
+import {ActivityType,Client,GatewayIntentBits as I,Events,MessageFlags,PermissionFlagsBits as P} from 'discord.js';
 import {createServer} from 'node:http';
 import {register} from './register.js';
 import {moderate} from './moderation.js';
@@ -30,7 +30,10 @@ function safeError(error) {
 client.once(Events.ClientReady,async ready=>{
   try {
     await register(ready.user.id);commandsReady=true;
-    ready.user.setActivity('Tav help | Moderation + AI');
+    ready.user.setPresence({
+      status: 'online',
+      activities: [{name: 'Custom Status', type: ActivityType.Custom, state: 'tavreniq.bot'}]
+    });
     console.log(`TAVRENIQ online as ${ready.user.tag}.`);
   } catch(error) {console.error('Command registration failed:',error.code || error.name);shutdown(1);}
 });
