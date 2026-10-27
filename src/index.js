@@ -17,10 +17,46 @@ const server=createServer((req,res)=>{
 const help=`**TAVRENIQ · Moderation & AI**
 **AI:** /ask, /forget — or mention me, say “Tavreniq” / “Tav”, or reply to my message.
 **Moderation:** /warn, /warnings, /timeout, /untimeout, /kick, /ban, /unban, /purge, /role
-**Utility:** /help, /ping, /invite
+**Utility:** /help, /ping, /invite; Tav tag Marlow (members or bots)
 **Text commands:** Tav timeout @member 10m reason; Tav warn @member reason; Tav kick @member reason; Tav ban @member reason; Tav untimeout @member
 Permissions and role hierarchy apply to every moderation action.
 AI messages and your display/server names are sent to Google Gemini. Conversation memory expires after 30 minutes of inactivity or on restart. /forget clears your memory here. Private /ask memory is separate from public chat.`;
+
+const tagCooldowns=new Set();
+const normalizedName=value=>(value || '').normalize('NFKC').trim().toLowerCase();
+async function tagMember(m,rawName) {
+  const query=rawName.trim().replace(/^@(?=[^!&<])/,'');
+  const reply=content=>m.reply({content,allowedMentions:{parse:[],repliedUser:false}});
+  if(!query || query.length>100) return reply('Use “Tav tag Marlow” with a member’s name, username, or user ID.');
+  if(/^(everyone|here)$/i.test(query)) return reply('Please give me one member or bot name to tag.');
+  const key=m.guild.id+':'+m.author.id;
+  if(tagCooldowns.has(key)) return reply('Please wait a few seconds before tagging again.');
+  tagCooldowns.add(key);
+  setTimeout(()=>tagCooldowns.delete(key),5000).unref();
+  const id=query.match(/^(?:<@!?(\d{17,20})>|(\d{17,20}))$/);
+  let target;
+  if(id) {
+    target=await m.guild.members.fetch({user:id[1] || id[2],force:true}).catch(error=>{
+      if(error.code===10007 || error.code===10013) return null;
+      throw error;
+    });
+  } else {
+    // REST search includes offline members and bots without a full member-list intent.
+    const found=await m.guild.members.search({query,limit:1000});
+    const needle=normalizedName(query);
+    const names=member=>[member.user.username,member.nickname,member.user.globalName].map(normalizedName).filter(Boolean);
+    const exact=[...found.values()].filter(member=>names(member).includes(needle));
+    const candidates=exact.length?exact:[...found.values()].filter(member=>names(member).some(name=>name.startsWith(needle)));
+    if(found.size>=1000 || candidates.length>1) {
+      const choices=candidates.slice(0,5).map(member=>'• '+member.user.username+' — ID: '+member.id).join('\n');
+      return reply('Several members may match. Use a more specific username or “Tav tag USER_ID”.'+(choices?'\n'+choices:''));
+    }
+    target=candidates[0];
+  }
+  if(!target) return reply('I couldn’t find that member in this server. Try their username, server nickname, or user ID.');
+  return m.reply({content:'<@'+target.id+'>',allowedMentions:{parse:[],users:[target.id],repliedUser:false}});
+}
+
 const chunks = value => value.match(/[\s\S]{1,1900}/g) || ['No response.'];
 function safeError(error) {
   // API errors can contain request details: never echo raw Discord/network errors.
@@ -79,6 +115,8 @@ client.on(Events.MessageCreate,async m=>{
     const prompt=(triggered?m.content.replace(prefix,''):m.content).trim();
     if(!prompt) {await m.reply('Hi! Ask me something, or use /help.');return;}
     if(/^help$/i.test(prompt)) {await m.reply(help);return;}
+    const tag=prompt.match(/^(?:tag|mention)\b\s*(.*)$/i);
+    if(tag) {await tagMember(m,tag[1]);return;}
     const action=parseAction(prompt);
     if(action) {await m.reply(await moderate(m.guild,m.channel,m.author.id,action));return;}
     // Malformed moderation requests never go to the language model.
