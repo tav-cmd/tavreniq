@@ -9,10 +9,13 @@ import {createQuizStore} from './quiz/storage.js';
 import {QuizService} from './quiz/service.js';
 import {QuizText} from './quiz/text.js';
 import {isOwnerQuestion,ownerReply} from './owner.js';
+import {createBuilderStore} from './builder/storage.js';
+import {ServerBuilder} from './builder/service.js';
 if(!process.env.DISCORD_TOKEN) {console.error('Set DISCORD_TOKEN before starting. See README.md.');process.exit(1);}
 const client=new Client({intents:[I.Guilds,I.GuildMessages,I.MessageContent],allowedMentions:{parse:[],repliedUser:false}});
 const quiz=new QuizService(createQuizStore(db));
 const quizText=new QuizText(quiz);
+const builder=new ServerBuilder(createBuilderStore(db));
 let commandsReady=false;
 const server=createServer((req,res)=>{
   if(req.url!=='/api/healthz'){res.writeHead(404);res.end('Not found');return;}
@@ -23,6 +26,7 @@ const server=createServer((req,res)=>{
 const help=`**TAVRENIQ · Moderation & AI**
 **AI:** /ask, /forget — or mention me, say “Tavreniq” / “Tav”, or reply to my message.
 **Moderation:** /warn, /warnings, /timeout, /untimeout, /kick, /ban, /unban, /purge, /role
+**Server builder:** /create server prompt:... or Tav create a server — administrators only; preview before building. /create status retrieves progress.
 **Utility:** /help, /ping, /invite; Tav tag Marlow (members or bots)
 **Quiz:** Administrators/server owner: Tav start a quiz 10 questions (omit the count and I’ll ask); /quiz start, /quiz questions, /quiz leaderboard, /quiz stop, /quiz results — 150 built-in questions and private answer feedback.
 **Text commands:** Tav timeout @member 10m reason; Tav warn @member reason; Tav kick @member reason; Tav ban @member reason; Tav untimeout @member
@@ -74,6 +78,7 @@ client.once(Events.ClientReady,async ready=>{
   try {
     await register(ready.user.id);
     await quiz.recover(ready);
+    await builder.recover(ready);
     commandsReady=true;
     ready.user.setPresence({
       status: 'online',
@@ -83,6 +88,7 @@ client.once(Events.ClientReady,async ready=>{
   } catch(error) {console.error('Command registration failed:',error.code || error.name);shutdown(1);}
 });
 client.on(Events.InteractionCreate,async i=>{
+  if(await builder.handle(i)) return;
   if(await quiz.handle(i)) return;
   if(!i.isChatInputCommand() || !i.inGuild()) return;
   try {
@@ -94,7 +100,7 @@ client.on(Events.InteractionCreate,async i=>{
     if(i.commandName==='help') result=help;
     else if(i.commandName==='ping') result=`Online. Gateway latency: ${client.ws.ping} ms.`;
     else if(i.commandName==='invite') {
-      const permissions=P.ViewChannel|P.SendMessages|P.SendMessagesInThreads|P.EmbedLinks|P.ReadMessageHistory|P.ModerateMembers|P.KickMembers|P.BanMembers|P.ManageMessages|P.ManageRoles;
+      const permissions=P.ViewChannel|P.SendMessages|P.SendMessagesInThreads|P.EmbedLinks|P.ReadMessageHistory|P.ModerateMembers|P.KickMembers|P.BanMembers|P.ManageMessages|P.ManageRoles|P.ManageChannels;
       result=`https://discord.com/oauth2/authorize?client_id=${client.user.id}&scope=bot%20applications.commands&permissions=${permissions}`;
     } else if(i.commandName==='forget') {forget(i.guildId,i.channelId,i.user.id);result='Your AI conversation memory in this channel has been cleared.';}
     else if(i.commandName==='ask') result=await ask({guild:i.guildId,channel:i.channelId,user:i.user.id,mode:'private',prompt:i.options.getString('message'),displayName:i.user.username,serverName:i.guild.name});
@@ -125,11 +131,13 @@ client.on(Events.MessageCreate,async m=>{
       replyToBot=replied?.author.id===client.user.id;
     }
     if(!triggered && !replyToBot) {
+      if(builder.hasPending(m)) {await builder.handleMessage(m,m.content,{addressed:false});return;}
       if(quizText.hasPending(m)) await quizText.handle(m,m.content,{addressed:false});
       return;
     }
     const prompt=(triggered?m.content.replace(prefix,''):m.content).trim();
     if(!prompt) {await m.reply('Hi! Ask me something, or use /help.');return;}
+    if(await builder.handleMessage(m,prompt)) return;
     if(await quizText.handle(m,prompt)) return;
     if(isOwnerQuestion(prompt)) {await m.reply(await ownerReply(m.guild));return;}
     if(/^help$/i.test(prompt)) {await m.reply(help);return;}
@@ -152,7 +160,7 @@ client.on(Events.Error,error=>console.error('Discord connection error:',error.co
 let stopping=false;
 function shutdown(code=0) {
   if(stopping)return;stopping=true;commandsReady=false;
-  quiz.shutdown();client.destroy();close();server.close(()=>process.exit(code));
+  builder.shutdown();quiz.shutdown();client.destroy();close();server.close(()=>process.exit(code));
   setTimeout(()=>process.exit(code),3000).unref();
 }
 process.on('SIGTERM',()=>shutdown());process.on('SIGINT',()=>shutdown());

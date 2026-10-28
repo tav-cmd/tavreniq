@@ -7,6 +7,10 @@ const base = (name,description,perm) => {
 const user = c => c.addUserOption(o=>o.setName('user').setDescription('Target member').setRequired(true));
 const reason = c => c.addStringOption(o=>o.setName('reason').setDescription('Reason for this action').setMaxLength(400));
 export const commands = [
+  base('create','Build a server layout from a prompt',P.Administrator)
+    .addSubcommand(c=>c.setName('server').setDescription('Preview new categories, channels and roles')
+      .addStringOption(o=>o.setName('prompt').setDescription('Describe the layout and permissions you want').setRequired(true).setMinLength(5).setMaxLength(3500)))
+    .addSubcommand(c=>c.setName('status').setDescription('View the latest server build report')),
   base('quiz','Play TAVRENIQ multiplayer quizzes')
     .addSubcommand(c=>c.setName('start').setDescription('Start a quiz immediately')
       .addIntegerOption(o=>o.setName('number_of_questions').setDescription('Number of unique questions (1–150)').setRequired(true).setMinValue(1).setMaxValue(150)))

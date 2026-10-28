@@ -201,3 +201,88 @@ such as `Tav who is your owner?`, `Tav who created you?` and `/ask` with an owne
 question bypass AI and mention only that configured account if it is a current
 server member. Without an ID, the bot explains that owner tagging is not configured.
 If the owner is absent, it gives the name without pinging anyone else.
+
+## Prompt-based server builder
+
+Use `/create server prompt:Create a gaming community with public rules and chat,
+private staff channels, staff and member roles, and two voice rooms` or say
+`Tav create a server`. The text command asks for your description and accepts the
+same user's next message in the same channel for five minutes. Say `cancel` to
+cancel that prompt request. Descriptions are sent to the configured Gemini model;
+this feature needs `GEMINI_API_KEY`. It does not use or change `/ask` conversation
+memory and does not connect to a personal ChatGPT conversation.
+
+The command builds **inside the current server**, not a new Discord guild. It
+creates new roles, categories, and ordinary text/voice channels only. It does not
+rename the server, assign members to roles, install bots, create forum/stage
+channels, configure Community, or modify/delete existing channels and roles.
+
+### Preview and approval
+
+Only the server owner or a member with the actual Administrator permission can
+request/approve a build. The bot re-fetches permissions before building and before
+each creation. The AI produces data, never executable code. An allowlisted schema
+validates names, counts, permission flags, role references, and visibility.
+
+The paginated preview includes every planned role permission, category/channel
+visibility, text-posting/voice access, topic and slow mode. **Build** executes the
+reviewed plan once. **Change plan** opens a form for a complete revised description
+and invalidates the old confirmation. **Cancel** creates nothing. Only the original
+requester can use those buttons. Previews expire in ten minutes. Plan requests
+have a 30-second per-user/server cooldown and a global concurrency limit of four.
+
+Maximum per plan: 15 new roles, 10 categories, 25 text/voice channels. Smaller
+layouts are easier to review. If a same-type channel/category or role with a
+planned name already exists, the builder asks for a different name rather than
+merging or changing permissions on it. New roles are created in the planned order,
+with the highest responsibility first; they remain below the bot's highest role.
+No roles are assigned automatically. Assign them in Discord after reviewing the
+result. Administrator roles always bypass channel access restrictions.
+
+### Permissions and deployment
+
+Pull `main` and restart; slash commands register at startup. The existing Node 24
+startup and database work unchanged. No new package is needed. The updated invite
+link requests Manage Channels in addition to the bot's previous permissions.
+
+The bot needs Manage Channels and Manage Roles, plus any permission it is asked
+to grant to a role. Channel creation checks View Channel, Read Message History,
+Send Messages, Embed Links, Send Messages in Threads, Create Public Threads and
+Create Private Threads, and for voice layouts Connect/Speak. The bot must have
+permissions it allows or denies in channel overwrites. Place its role above the
+roles it will manage. Send Messages/Embed Links are needed in the command channel;
+Attach Files allows the detailed report to be attached. The builder reports
+missing capabilities before the first creation. Grant only capabilities needed by
+your reviewed plan; Administrator is not required for ordinary layouts.
+
+Private visibility is applied atomically when channels are created. Everyone is
+denied viewing unless the preview permits everyone; only the named new roles and
+the bot get explicit access. Read-only channels deny ordinary-member posting and
+thread creation. A person with any allowed role can access the channel; Discord
+combines role allows, and administrators bypass overwrites. Voice channel text
+chat and new thread creation are disabled by this builder. Existing server-wide
+@everyone permissions are preserved.
+
+### Reliability and reports
+
+The existing SQLite database stores plans and build journals in `server_builds`.
+One build can run per server. Duplicate Build clicks cannot execute the same plan
+twice. Creation calls are sequential and use Discord.js's rate-limit handling.
+Each request is journaled before sending and its new object ID saved afterward.
+A failure stops subsequent steps; successfully created objects remain in place.
+No automatic rollback/deletion or automatic retry of a failed build is performed.
+
+`/create status` retrieves the latest build's status and report of saved object IDs.
+A network failure or crash can leave the last request's outcome uncertain. Inspect
+that named object in Discord before retrying. On restart, active builds are marked
+interrupted, reported when possible, and never replayed automatically. Preview
+plans remain usable only until their original expiration. Use one bot process per
+database and keep `DATA_DIR` persistent.
+
+Automated tests use real SQLite and mocked Gemini/Discord APIs. They cover schema
+validation, permission boundaries, private/read-only overwrites, preview-only
+planning, approval, duplicate confirmation, revocation, cancellation/revision,
+expired previews, partial failures, restart recovery, pagination and command
+registration payloads. No live server creation or Gemini generation was performed
+in the development tests. After deployment, first preview a small layout in a test
+server, review every page, and approve it to verify your actual hosting permissions.
