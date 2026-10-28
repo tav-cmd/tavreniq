@@ -21,7 +21,7 @@ export async function executeBuild(store,s,guild,{progress=async()=>{},stopping=
       if(!me.permissions.has([P.ManageChannels,P.ManageRoles]))throw new Error('My Manage Channels or Manage Roles permission was removed.');
       const {kind,item}=tasks[n];
       const objects=await (kind==='role'?guild.roles.fetch():guild.channels.fetch());
-      if([...objects.values()].filter(Boolean).some(o=>(kind==='role'||o.type===(kind==='category'?ChannelType.GuildCategory:item.type==='text'?ChannelType.GuildText:ChannelType.GuildVoice))&&canonical(o.name)===canonical(item.name)))throw new Error(`An object named ${item.name} now exists. Stopping to avoid duplication.`);
+      if([...objects.values()].filter(Boolean).some(o=>(kind==='role'||(o.type===(kind==='category'?ChannelType.GuildCategory:item.type==='text'?ChannelType.GuildText:ChannelType.GuildVoice)&&(kind!=='channel'||(o.parentId ?? o.parent)===ids[item.category])))&&canonical(o.name)===canonical(item.name)))throw new Error(`An object named ${item.name} now exists. Stopping to avoid duplication.`);
       if(kind==='role'&&!me.permissions.has(mask(item.permissions)))throw new Error(`I no longer have the permissions required for role ${item.name}.`);
       store.pending(s.id,`${kind}: ${item.name}`); // Journal before sending a mutating request.
       const reason=`TAVRENIQ builder ${s.id}; approved by ${s.requester}`;

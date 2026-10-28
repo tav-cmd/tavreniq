@@ -1,4 +1,5 @@
 import {PermissionFlagsBits as P,ChannelType} from 'discord.js';
+import {normalizePlanKeys} from './keys.js';
 export const PERMISSIONS=['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','AttachFiles','AddReactions','UseExternalEmojis','UseApplicationCommands','Connect','Speak','Stream','UseVAD','ChangeNickname','ManageNicknames','ManageMessages','ManageThreads','CreatePublicThreads','CreatePrivateThreads','SendMessagesInThreads','ModerateMembers','KickMembers','BanMembers','ManageChannels','ManageRoles','ManageGuild','ViewAuditLog','MentionEveryone','Administrator'];
 const fail=text=>{throw new Error(`Invalid server plan: ${text}`);};
 function object(o,keys) {if(!o || typeof o!=='object'||Array.isArray(o)||Object.keys(o).some(k=>!keys.includes(k)))fail('unexpected fields. Please describe roles, categories, and text/voice channels only.');}
@@ -8,6 +9,7 @@ function unique(items,label) {if(new Set(items).size!==items.length)fail(`duplic
 export const canonical=s=>s.normalize('NFKC').toLowerCase().replace(/[\s_-]+/g,'-').trim();
 export function validatePlan(raw) {
   object(raw,['roles','categories','channels']);
+  raw=normalizePlanKeys(raw);
   const keys=new Set();
   const key=k=>{k=str(k,1,32,'key');if(!/^[a-z][a-z0-9_]*$/.test(k)||k==='everyone'||keys.has(k))fail('keys must be unique lowercase identifiers.');keys.add(k);return k;};
   const roles=list(raw.roles,15,'roles').map(r=>{
@@ -45,7 +47,7 @@ export function validatePlan(raw) {
     return {key:key(c.key),name,type:c.type,category:c.category,topic,view,post,connect,slowmode:c.slowmode};
   });
   if(!channels.length)fail('include at least one channel.');
-  unique(channels.map(c=>`${c.type}:${canonical(c.name)}`),'channel names of the same type');
+  unique(channels.map(c=>`${c.category}:${c.type}:${canonical(c.name)}`),'channel names within a category');
   return {roles,categories,channels};
 }
 export async function requireBuilderAdmin(guild,user) {
@@ -68,7 +70,8 @@ export async function preflight(guild,user,plan) {
   const [roles,channels]=await Promise.all([guild.roles.fetch(),guild.channels.fetch()]);
   if(roles.size+plan.roles.length>250 || channels.size+plan.categories.length+plan.channels.length>500)throw new Error('This plan would exceed Discord’s role or channel limit.');
   for(const r of plan.roles)if([...roles.values()].some(o=>canonical(o.name)===canonical(r.name)))throw new Error(`A role named “${r.name}” already exists. Change the plan to use a new name; existing roles will not be modified.`);
-  for(const c of [...plan.categories,...plan.channels])if([...channels.values()].filter(Boolean).some(o=>o.type===(c.type==='text'?ChannelType.GuildText:c.type==='voice'?ChannelType.GuildVoice:ChannelType.GuildCategory)&&canonical(o.name)===canonical(c.name)))throw new Error(`A channel/category named “${c.name}” already exists. Change the plan to avoid duplicating it.`);
+  // Every planned category is new, so same-named channels in other categories are safe.
+  for(const c of plan.categories)if([...channels.values()].filter(Boolean).some(o=>o.type===(c.type==='text'?ChannelType.GuildText:c.type==='voice'?ChannelType.GuildVoice:ChannelType.GuildCategory)&&canonical(o.name)===canonical(c.name)))throw new Error(`A channel/category named “${c.name}” already exists. Change the plan to avoid duplicating it.`);
   return me;
 }
 export function overwrites(plan,item,guildId,botId,ids) {

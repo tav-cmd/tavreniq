@@ -46,7 +46,7 @@ test('plan validates structure and rejects injected operations, privilege names 
   for(const bad of cases)assert.throws(()=>validatePlan(bad),/Invalid server plan/);
 });
 test('channel overwrite rules hide private channels and make announcements read-only before role grants',()=>{
-  const p=validatePlan(plan()),ids={staff:'staffid'};
+  const p=validatePlan(plan()),ids={[p.roles[0].key]:'staffid'};
   const privateRules=overwrites(p,p.channels[1],'guild','bot',ids);
   assert.ok(privateRules[0].deny.includes(P.ViewChannel));
   assert.ok(privateRules.find(o=>o.id==='staffid').allow.includes(P.ViewChannel));
@@ -151,4 +151,19 @@ test('preview includes access and permissions, paginates within embed limits; co
   assert.ok(previewPages(s).length>1);
   for(let n=0;n<previewPages(s).length;n++){const v=preview(s,n);new EmbedBuilder(v.embeds[0]).toJSON();assert.ok(v.embeds[0].description.length<=3500);assert.equal(v.components[0].components.length,5);}
   const command=commands.find(c=>c.name==='create');assert.equal(command.default_member_permissions,P.Administrator.toString());assert.equal(command.options[0].options[0].name,'prompt');assert.equal(command.options[0].options[0].required,true);
+});
+test('same-named channels in different categories are normalized and built without dropping either',async()=>{
+  const h=harness();try {
+    const p=plan();p.channels[0].name='general';p.channels[1].name='general';
+    p.channels[0].key='general';p.channels[1].key='general';
+    h.service.planner=async()=>p;
+    h.channels.set('existing',{id:'existing',name:'general',type:0,parentId:'old-category'});
+    const s=await h.previewPlan();assert.equal(s.plan.channels.length,3);
+    await h.service.handle(h.interaction({id:s.id}));
+    assert.equal(h.store.get(s.id).status,'completed');
+    const created=h.calls.filter(([kind,o])=>kind==='channel'&&o.name==='general');
+    assert.equal(created.length,2);assert.notEqual(created[0][1].parent,created[1][1].parent);
+    assert.ok(created[1][1].permissionOverwrites[0].deny.includes(P.ViewChannel));
+    assert.ok(h.channels.has('existing'));
+  }finally{h.close();}
 });

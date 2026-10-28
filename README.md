@@ -232,7 +232,7 @@ requester can use those buttons. Previews expire in ten minutes. Plan requests
 have a 30-second per-user/server cooldown and a global concurrency limit of four.
 
 Maximum per plan: 15 new roles, 10 categories, 25 text/voice channels. Smaller
-layouts are easier to review. If a same-type channel/category or role with a
+layouts are easier to review. If a category or role with a
 planned name already exists, the builder asks for a different name rather than
 merging or changing permissions on it. New roles are created in the planned order,
 with the highest responsibility first; they remain below the bot's highest role.
@@ -286,3 +286,19 @@ expired previews, partial failures, restart recovery, pagination and command
 registration payloads. No live server creation or Gemini generation was performed
 in the development tests. After deployment, first preview a small layout in a test
 server, review every page, and approve it to verify your actual hosting permissions.
+
+### Generated key normalization
+
+The builder allocates internal keys in code before validating or displaying plans.
+Keys are globally unique lowercase snake_case, start with a letter, and are capped
+at 32 characters. Role keys use `role_`; channel keys start with their category key
+(e.g. `community_general`, `information_welcome`). Numeric suffixes resolve
+collisions, including after truncation. Display names are kept separate and unchanged.
+
+Original role/category keys and unambiguous display-name aliases are mapped to the
+new identifiers. Visibility, posting, voice access and parent-category references
+are rewritten together. Normalizing an already-normalized plan is idempotent.
+Same-named channels in different categories are preserved and built separately.
+Unknown or genuinely ambiguous references are rejected with a targeted error,
+not guessed, broadened to everyone, or silently discarded. No object is removed
+to make its keys pass validation. Permission and approval checks still apply.

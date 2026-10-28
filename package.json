@@ -10,7 +10,7 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "register": "node --env-file-if-exists=.env src/register.js",
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/moderation.js && node --check src/ai.js && node --check src/quiz/core.js && node --check src/quiz/questions.js && node --check src/quiz/storage.js && node --check src/quiz/views.js && node --check src/quiz/service.js && node --check src/quiz/text.js && node --check src/owner.js && node --check src/builder/plan.js && node --check src/builder/planner.js && node --check src/builder/storage.js && node --check src/builder/views.js && node --check src/builder/service.js"
+    "check": "node --check src/index.js && node --check src/moderation.js && node --check src/ai.js && node --check src/quiz/core.js && node --check src/quiz/questions.js && node --check src/quiz/storage.js && node --check src/quiz/views.js && node --check src/quiz/service.js && node --check src/quiz/text.js && node --check src/owner.js && node --check src/builder/plan.js && node --check src/builder/planner.js && node --check src/builder/storage.js && node --check src/builder/views.js && node --check src/builder/service.js && node --check src/builder/keys.js"
   },
   "dependencies": {
     "discord.js": "14.27.0"
