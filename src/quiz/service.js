@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {MessageFlags,PermissionFlagsBits as P} from 'discord.js';
 import {selectQuestions,timerSeconds} from './core.js';
 import {questions} from './questions.js';
+import {requireQuizAdmin} from './text.js';
 import {questionView,resultsView,reviewView,leaderboardView,noMentions} from './views.js';
 
 export class QuizService {
@@ -26,7 +27,7 @@ export class QuizService {
         switch(i.options.getSubcommand()) {
           case 'start': await this.start(i);break;
           case 'stop': await this.stop(i);break;
-          case 'questions': await i.editReply({content:`**TAVRENIQ Quiz • ${questions.length} built-in questions**\n15 topics • Mixed difficulty • Four choices • ${this.seconds} seconds per question\nStart immediately with /quiz start number_of_questions:10 (1–150). Click A, B, C, or D to join. One answer per question; feedback is private.\nCorrect = 1 point. Accuracy = correct ÷ answered. Missed questions, including before joining, count as unanswered.\nUse /quiz leaderboard for server rankings and /quiz results for the latest finished quiz here.`,allowedMentions:noMentions});break;
+          case 'questions': await i.editReply({content:`**TAVRENIQ Quiz • ${questions.length} built-in questions**\n15 topics • Mixed difficulty • Four choices • ${this.seconds} seconds per question\nServer owners and administrators can start with /quiz start number_of_questions:10 (1–150). Click A, B, C, or D to join. One answer per question; feedback is private.\nCorrect = 1 point. Accuracy = correct ÷ answered. Missed questions, including before joining, count as unanswered.\nUse /quiz leaderboard for server rankings and /quiz results for the latest finished quiz here.`,allowedMentions:noMentions});break;
           case 'leaderboard': await i.editReply(leaderboardView(i.guildId,this.store.leaderboard(i.guildId)));break;
           case 'results': {
             const id=this.store.latest(i.guildId,i.channelId);
@@ -54,6 +55,7 @@ export class QuizService {
       seconds:this.seconds,index:-1,played:0,accepting:false,channelObject:i.channel,operation:Promise.resolve(),persisted:false};
     this.sessions.set(key,s); // Reserve before any Discord/network await.
     try {
+      await requireQuizAdmin(i.guild,i.user.id);
       const me=await i.guild.members.fetchMe();
       const send=i.channel.isThread()?P.SendMessagesInThreads:P.SendMessages;
       if(!i.channel.permissionsFor(me)?.has([P.ViewChannel,send,P.EmbedLinks]))

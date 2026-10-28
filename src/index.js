@@ -7,9 +7,12 @@ import {ask,forget} from './ai.js';
 import {close,db} from './store.js';
 import {createQuizStore} from './quiz/storage.js';
 import {QuizService} from './quiz/service.js';
+import {QuizText} from './quiz/text.js';
+import {isOwnerQuestion,ownerReply} from './owner.js';
 if(!process.env.DISCORD_TOKEN) {console.error('Set DISCORD_TOKEN before starting. See README.md.');process.exit(1);}
 const client=new Client({intents:[I.Guilds,I.GuildMessages,I.MessageContent],allowedMentions:{parse:[],repliedUser:false}});
 const quiz=new QuizService(createQuizStore(db));
+const quizText=new QuizText(quiz);
 let commandsReady=false;
 const server=createServer((req,res)=>{
   if(req.url!=='/api/healthz'){res.writeHead(404);res.end('Not found');return;}
@@ -21,7 +24,7 @@ const help=`**TAVRENIQ · Moderation & AI**
 **AI:** /ask, /forget — or mention me, say “Tavreniq” / “Tav”, or reply to my message.
 **Moderation:** /warn, /warnings, /timeout, /untimeout, /kick, /ban, /unban, /purge, /role
 **Utility:** /help, /ping, /invite; Tav tag Marlow (members or bots)
-**Quiz:** /quiz start, /quiz questions, /quiz leaderboard, /quiz stop, /quiz results — 150 built-in questions and private answer feedback.
+**Quiz:** Administrators/server owner: Tav start a quiz 10 questions (omit the count and I’ll ask); /quiz start, /quiz questions, /quiz leaderboard, /quiz stop, /quiz results — 150 built-in questions and private answer feedback.
 **Text commands:** Tav timeout @member 10m reason; Tav warn @member reason; Tav kick @member reason; Tav ban @member reason; Tav untimeout @member
 Permissions and role hierarchy apply to every moderation action.
 AI messages and your display/server names are sent to Google Gemini. Conversation memory expires after 30 minutes of inactivity or on restart. /forget clears your memory here. Private /ask memory is separate from public chat.`;
@@ -85,6 +88,9 @@ client.on(Events.InteractionCreate,async i=>{
   try {
     await i.deferReply({flags:MessageFlags.Ephemeral});
     let result;
+    if(i.commandName==='ask' && isOwnerQuestion(i.options.getString('message'))) {
+      await i.editReply(await ownerReply(i.guild));return;
+    }
     if(i.commandName==='help') result=help;
     else if(i.commandName==='ping') result=`Online. Gateway latency: ${client.ws.ping} ms.`;
     else if(i.commandName==='invite') {
@@ -118,9 +124,14 @@ client.on(Events.MessageCreate,async m=>{
       const replied=await m.channel.messages.fetch(m.reference.messageId).catch(()=>null);
       replyToBot=replied?.author.id===client.user.id;
     }
-    if(!triggered && !replyToBot) return;
+    if(!triggered && !replyToBot) {
+      if(quizText.hasPending(m)) await quizText.handle(m,m.content,{addressed:false});
+      return;
+    }
     const prompt=(triggered?m.content.replace(prefix,''):m.content).trim();
     if(!prompt) {await m.reply('Hi! Ask me something, or use /help.');return;}
+    if(await quizText.handle(m,prompt)) return;
+    if(isOwnerQuestion(prompt)) {await m.reply(await ownerReply(m.guild));return;}
     if(/^help$/i.test(prompt)) {await m.reply(help);return;}
     const tag=prompt.match(/^(?:tag|mention)\b\s*(.*)$/i);
     if(tag) {await tagMember(m,tag[1]);return;}

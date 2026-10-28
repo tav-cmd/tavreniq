@@ -42,7 +42,7 @@ function harness(db=new DatabaseSync(':memory:')) {
   function interaction({sub='start',count=1,user='100',channelId='c',guildId='g',customId,message,moderator=false,ephemeral=false}={}) {
     const c=channel(channelId,guildId);
     const i={commandName:'quiz',guildId,channelId,channel:c,user:{id:user,username:'User'+user},member:{displayName:'Player'+user},
-      guild:{members:{fetchMe:async()=>({}),fetch:async()=>({permissions:{has:p=>moderator && p===P.ModerateMembers}})}},
+      guild:{ownerId:'100',members:{fetchMe:async()=>({}),fetch:async()=>({permissions:{has:p=>moderator && p===P.ModerateMembers}})}},
       options:{getSubcommand:()=>sub,getInteger:()=>count},isChatInputCommand:()=>!customId,isButton:()=>!!customId,inGuild:()=>true,
       customId,message:message?{...message,flags:{has:()=>ephemeral}}:null,outputs:[],
       deferReply:async payload=>{i.deferred=true;i.initial=payload;},deferUpdate:async()=>{i.deferred=true;i.updated=true;},
@@ -210,5 +210,12 @@ test('question edit failure and expired response token do not create phantom poi
     };
     await h.tick(s);await new Promise(resolve=>setImmediate(resolve));
     assert.equal(h.store.get(s.id).status,'failed');assert.equal(h.timers.size,0);
+  } finally {h.close();}
+});
+test('slash quiz start denies non-administrators while everyone can participate',async()=>{
+  const h=harness();try {
+    const i=h.interaction({user:'500',moderator:true});await h.service.handle(i);
+    assert.match(i.outputs[0].content,/Only the server owner or a server administrator/);assert.equal(h.service.sessions.size,0);
+    const s=await h.start();const answer=await h.answer(s,'500');assert.match(answer.outputs[0].content,/Correct!/);
   } finally {h.close();}
 });

@@ -180,3 +180,24 @@ After deploying, run `/quiz questions`, then `/quiz start number_of_questions:1`
 with two human accounts. Confirm each account sees only its own feedback, wait
 for results, open Review answers, and check `/quiz leaderboard`. The console
 should report command registration and `TAVRENIQ online`.
+
+## Natural quiz commands and owner mentions
+
+Only the server owner or members with Discord's **Administrator** permission may
+start quizzes, via slash commands or text. Manage Server or Moderate Members alone
+does not allow starting. Everyone can still answer questions.
+
+- `Tav start a quiz 2 questions`
+- `Tav begin a quiz with 10 questions`
+- `Tav start a quiz` → the bot asks how many; the same administrator replies with
+  `2` or `2 questions` in the same channel within two minutes. `cancel` cancels setup.
+
+Permissions are fetched again before starting, including after follow-up replies.
+Quiz setup waits are scoped to user, channel and server and expire on restart.
+
+Set `BOT_OWNER_ID` to the bot owner's Discord user ID and `BOT_OWNER_NAME` to the
+owner's display name. These settings do not grant server permissions. Questions
+such as `Tav who is your owner?`, `Tav who created you?` and `/ask` with an owner
+question bypass AI and mention only that configured account if it is a current
+server member. Without an ID, the bot explains that owner tagging is not configured.
+If the owner is absent, it gives the name without pinging anyone else.
