@@ -302,3 +302,157 @@ Same-named channels in different categories are preserved and built separately.
 Unknown or genuinely ambiguous references are rejected with a targeted error,
 not guessed, broadened to everyone, or silently discarded. No object is removed
 to make its keys pass validation. Permission and approval checks still apply.
+
+## Per-server economy
+
+Every server has separate accounts, inventory, shop, jobs, rewards, cooldowns and
+settings. The default currency is **💵 dollar**. Balances start at zero. This is
+fictional game currency: no purchases with real money, withdrawals to real money,
+or cross-server transfers. Economy features do not require an AI API key.
+
+### Member commands
+
+- `/balance [user]`, `/profile [user]`: wallet, bank, reserved/available bank funds,
+  guard count, work boost, streak, today's earnings and lifetime quiz earnings.
+- `/daily`: reward and capped streak bonus.
+- `/jobs`, `/work [job]`: browse jobs and work; autocomplete chooses a job. Work
+  uses one shared cooldown per member, so switching jobs cannot bypass it.
+- `/deposit amount`, `/withdraw amount`: move funds between wallet and bank.
+- `/pay user amount`: wallet transfer with an explicit confirmation, expiring in
+  two minutes. Funds are checked again on confirmation.
+- `/shop`, `/buy item [quantity]`, `/inventory`, `/use item`: paginated shop and
+  inventory with autocomplete. Prices are charged to the wallet.
+- `/crime`: a configurable reward chance, or a wallet fine on failure. You must
+  be able to cover the potential fine before trying.
+- `/rob wallet user`, `/rob bank user`: robbery rules below. Targets must be
+  human members of the same server; self-robbery is not allowed.
+- `/richest [type]`: total wealth or quiz earnings within this server.
+- `/transactions`: your wallet/bank transaction history.
+
+### Administration
+
+`/economy config` opens interactive menus, buttons and forms. Server owners and
+members with the **Administrator** permission can configure:
+
+- Currency name and emoji.
+- Daily reward, streak bonus, maximum bonus streak and cooldown.
+- Total daily earning cap and the additional quiz earning cap.
+- Per-correct-answer reward, first/second/third bonuses and podium minimum players.
+- Jobs: add/edit names, minimum/maximum pay, cooldown and enabled state.
+- Shop: create/edit item names, emojis, descriptions, prices and supported effects;
+  disable/re-enable sales. Maximum 25 jobs and 50 items per server.
+- Wallet/bank robbery percentages, fines, minimum attacker balances and cooldowns.
+- Crime payout range, fine, success chance and cooldown.
+- Administrator logs of configuration and balance changes.
+
+`/set balance user account amount` sets **wallet or bank** explicitly. It cannot
+reduce a bank below funds currently reserved for a robbery. Permissions are
+rechecked on form submissions; the bot owner ID does not grant server economy
+administration powers. Names/descriptions do not execute code or assign roles.
+
+All amounts are nonnegative whole numbers, with a maximum wallet/bank balance of
+1,000,000,000,000. Cooldowns are entered in seconds (10–604,800). Daily earning
+limits reset at midnight **Africa/Lagos**. They apply to minted daily, work, crime
+and quiz rewards; transfers and robbery proceeds move existing money and are not
+counted as minted earnings. A payout can be reduced to the remaining daily limit.
+
+### Initial defaults (editable by each server)
+
+| Setting | Default |
+| --- | --- |
+| Currency | 💵 dollar |
+| Daily | 250; +25 per consecutive claim day, capped at day 7; 24-hour cooldown |
+| Courier job | 50–150; 30-minute cooldown |
+| Developer job | 100–250; 1-hour cooldown |
+| Total daily earned cap | 10,000 |
+| Daily quiz earned cap | 2,000 |
+| Quiz answer reward | 10 per correct answer |
+| Quiz podium bonuses | 150 / 100 / 50; minimum 3 participants |
+| Crime | 60% success; 100–300 reward; 100 failure fine; 1-hour cooldown |
+| Wallet robbery | 5%–15% theft; 10% guard fine; 100 minimum attacker wallet; 1-hour cooldown |
+| Bank robbery | 10%–30% total theft; 20% panic fine; 100 minimum robber bank; 6-hour cooldown |
+| Security Guard | 500 each; maximum five guards held |
+| Double Shift | 150; +100% on the next work reward after `/use` |
+| Golden Ticket | 1,000; collectible |
+
+### Security Guards and custom items
+
+A Security Guard automatically blocks one attempted wallet robbery. The attacker
+pays the configured percentage of their current wallet to the victim, and exactly
+one guard is consumed. All custom guard items count toward the same five-guard
+limit. Without a guard, wallet theft succeeds for a random configured percentage
+of the victim's current wallet. Bank robbery is not blocked by guards.
+
+Custom items support three effects: **guard**, **boost** and **collectible**. Boosts
+increase the next work payout by 1–500% and must be activated with `/use`; only one
+boost can be active at once. Daily caps still apply. Collectibles remain in the
+inventory. Disabling sales does not remove owned items. An item's effect/strength
+cannot be changed while members own it; create a new item for a different effect.
+Name, description and price remain editable. New effect types require code changes.
+
+### Bank robberies and the private panic button
+
+The starter opens a public message in the current channel, mentioning the victim.
+The victim must be able to see that channel and its message history. The countdown
+is 30 seconds, starting when the message is posted. Up to ten robbers, including
+the starter, can join. Each member can be involved in only one active bank robbery
+per server, as either victim or robber.
+
+Joining reserves the configured fine percentage of **that robber's bank balance
+at joining**. Reserved money still appears in the bank total, but cannot be
+withdrawn or removed using `/set balance`. Other bank funds remain available.
+Depositing more after joining does not increase the already-reserved fine.
+
+Only the targeted victim can press **Panic**. The press is recorded before network
+acknowledgement and receives an ephemeral reply. It never edits the shared message
+or reveals the panic state during the countdown. Other robbers may still join.
+At the deadline:
+
+- **Panic pressed:** each robber's reserved fine transfers to the victim's bank.
+  By default this is 20% of each robber's individual starting bank balance.
+- **No panic:** the robbery succeeds. A random whole percentage from 10 through
+  30 (by default) is taken from the victim's **bank at resolution**, once total,
+  and split equally among the crew. Integer remainders go in join order, differing
+  by at most one dollar. Robbers receive the proceeds in their banks and their
+  fine holds are released. If the victim has withdrawn everything, the take is zero.
+
+No additional random failure chance is applied. A deleted/unavailable robbery
+message, unavailable victim, or a bot restart cancels the pending robbery with all
+holds and robbery cooldowns released; no financial outcome is guessed while the
+victim cannot interact. A settlement that would exceed a balance limit similarly
+cancels atomically. Completed money transfers are never replayed. Undelivered
+outcome messages can be retried on the next startup.
+
+### Quiz integration and persistence
+
+New quizzes snapshot their currency/reward/cap configuration when started.
+Normally completed quizzes pay answer rewards plus podium bonuses, subject to the
+snapshot caps and the participant's earnings that day. Podium rewards require the
+configured number of participants and at least one correct answer. Existing quiz
+ranking applies: score, then accuracy; exact ties share rank and receive that
+rank's bonus. Rewards are shown beside each participant's final results.
+Cancelled, failed and interrupted quizzes pay nothing. Pre-economy historical
+quizzes are not paid retroactively. The original quiz score leaderboard remains;
+`/richest type:Quiz earnings` is the separate money ranking. Currency display uses
+the server's current name/emoji if an administrator renames it later.
+
+Economy tables share the existing SQLite database. Balance moves, purchases,
+rewards, holds and settlements run in transactions. Interaction IDs and unique
+quiz reward rows prevent duplicate credits. Configuration changes and balance
+adjustments have administrator logs; financial changes have member ledger entries.
+The economy is local to each server, with no shared wallet or bank across servers.
+
+### Deployment and validation
+
+Pull `main` and restart using the existing Node 24 startup. No new packages, API
+keys or privileged intents are needed. New slash commands register automatically.
+Keep the existing `DATA_DIR` persistent. Back up SQLite safely before upgrades;
+run only one bot process per database.
+
+Automated tests use real SQLite and mocked Discord interactions/timers. They cover
+server isolation, payouts/cooldowns/caps, shop effects, admin checks, transfer
+confirmation and replay protection, escrow spending prevention, ten-person bank
+fines, successful split theft, private panic handling, interrupted recovery,
+exactly-once quiz payouts, menu payloads and command registration. Live Discord
+permissions and notifications still need a smoke test after deployment. Start
+with `/economy config`, `/daily`, `/balance`, and a two-account test robbery.

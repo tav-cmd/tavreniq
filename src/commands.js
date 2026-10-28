@@ -1,4 +1,5 @@
 import {SlashCommandBuilder, PermissionFlagsBits as P} from 'discord.js';
+import {economyCommands} from './economy/commands.js';
 const base = (name,description,perm) => {
   const cmd = new SlashCommandBuilder().setName(name).setDescription(description).setDMPermission(false);
   if(perm) cmd.setDefaultMemberPermissions(perm);
@@ -32,5 +33,5 @@ export const commands = [
   reason(base('unban','Unban a user by ID',P.BanMembers).addStringOption(o=>o.setName('user_id').setDescription('Discord user ID').setRequired(true))),
   base('purge','Delete recent messages (under 14 days old)',P.ManageMessages).addIntegerOption(o=>o.setName('count').setDescription('Number of messages').setMinValue(1).setMaxValue(100).setRequired(true)),
   reason(user(base('role','Add or remove a non-administrative role',P.ManageRoles)).addRoleOption(o=>o.setName('role').setDescription('Role to change').setRequired(true)).addStringOption(o=>o.setName('action').setDescription('Operation').setRequired(true).addChoices({name:'Add',value:'add'},{name:'Remove',value:'remove'})))
-].map(c=>c.toJSON());
+].map(c=>c.toJSON()).concat(economyCommands);
 

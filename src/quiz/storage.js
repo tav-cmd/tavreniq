@@ -1,5 +1,5 @@
 import {rank} from './core.js';
-export function createQuizStore(db) {
+export function createQuizStore(db,{economy}={}) {
   db.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS quiz_sessions (
       id TEXT PRIMARY KEY, guild TEXT NOT NULL, channel TEXT NOT NULL, starter TEXT NOT NULL,
@@ -20,7 +20,8 @@ export function createQuizStore(db) {
   return {
     get,
     start(s) {db.prepare('INSERT INTO quiz_sessions(id,guild,channel,starter,questions,seconds,created) VALUES(?,?,?,?,?,?,?)')
-      .run(s.id,s.guild,s.channel,s.starter,JSON.stringify(s.questions),s.seconds,new Date().toISOString());},
+      .run(s.id,s.guild,s.channel,s.starter,JSON.stringify(s.questions),s.seconds,new Date().toISOString());
+      economy?.snapshotQuiz(s.id,s.guild);},
     progress(id,played,message) {db.prepare("UPDATE quiz_sessions SET played=?,message=? WHERE id=? AND status='active'").run(played,message,id);},
     answer(id,index,user,name,choice,correct) {
       return db.prepare(`INSERT OR IGNORE INTO quiz_answers(session,question,user,name,choice,correct)
@@ -29,11 +30,16 @@ export function createQuizStore(db) {
     },
     finish(id,status) {
       if(!['completed','cancelled','interrupted','failed'].includes(status)) throw new Error('Invalid quiz status.');
-      db.prepare("UPDATE quiz_sessions SET status=?,ended=? WHERE id=? AND status='active'").run(status,new Date().toISOString(),id);
+      const finish=()=>{
+        db.prepare("UPDATE quiz_sessions SET status=?,ended=? WHERE id=? AND status='active'").run(status,new Date().toISOString(),id);
+        if(economy){if(status==='completed')economy.payQuiz(id);else economy.cancelQuiz(id);}
+      };
+      if(economy)economy.tx(finish);else finish();
     },
     recover() {
       const rows=db.prepare("SELECT id FROM quiz_sessions WHERE status='active'").all().map(r=>get(r.id));
       db.prepare("UPDATE quiz_sessions SET status='interrupted',ended=? WHERE status='active'").run(new Date().toISOString());
+      for(const r of rows)economy?.cancelQuiz(r.id);
       return rows;
     },
     results(id) {
@@ -42,7 +48,9 @@ export function createQuizStore(db) {
       const rows=db.prepare(`SELECT a.user,
         (SELECT b.name FROM quiz_answers b WHERE b.session=a.session AND b.user=a.user ORDER BY b.question DESC LIMIT 1) AS name,
         COUNT(*) AS answered,SUM(a.correct) AS correct FROM quiz_answers a WHERE a.session=? GROUP BY a.user`).all(id);
-      return {session,players:rank(rows.map(r=>({...r,played:session.played})))};
+      const rewards=economy?.quizRewards(id)||[];
+      const currency=economy?economy.config(session.guild).currency:null;
+      return {session,currency,players:rank(rows.map(r=>({...r,played:session.played}))).map(r=>({...r,...(economy?{earnings:rewards.find(x=>x.user===r.user)?.amount||0}:{})}))};
     },
     latest(guild,channel) {return db.prepare("SELECT id FROM quiz_sessions WHERE guild=? AND channel=? AND status!='active' ORDER BY rowid DESC LIMIT 1").get(guild,channel)?.id;},
     leaderboard(guild) {

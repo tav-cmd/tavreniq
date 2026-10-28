@@ -11,9 +11,13 @@ import {QuizText} from './quiz/text.js';
 import {isOwnerQuestion,ownerReply} from './owner.js';
 import {createBuilderStore} from './builder/storage.js';
 import {ServerBuilder} from './builder/service.js';
+import {EconomyStore} from './economy/store.js';
+import {EconomyService} from './economy/service.js';
 if(!process.env.DISCORD_TOKEN) {console.error('Set DISCORD_TOKEN before starting. See README.md.');process.exit(1);}
 const client=new Client({intents:[I.Guilds,I.GuildMessages,I.MessageContent],allowedMentions:{parse:[],repliedUser:false}});
-const quiz=new QuizService(createQuizStore(db));
+const economyStore=new EconomyStore(db);
+const economy=new EconomyService(economyStore);
+const quiz=new QuizService(createQuizStore(db,{economy:economyStore}));
 const quizText=new QuizText(quiz);
 const builder=new ServerBuilder(createBuilderStore(db));
 let commandsReady=false;
@@ -26,6 +30,7 @@ const server=createServer((req,res)=>{
 const help=`**TAVRENIQ · Moderation & AI**
 **AI:** /ask, /forget — or mention me, say “Tavreniq” / “Tav”, or reply to my message.
 **Moderation:** /warn, /warnings, /timeout, /untimeout, /kick, /ban, /unban, /purge, /role
+**Economy:** /balance, /daily, /work, /jobs, /deposit, /withdraw, /pay, /shop, /buy, /inventory, /use, /crime, /rob, /profile, /richest, /transactions. Admin: /economy config, /set balance. Each server has its own economy.
 **Server builder:** /create server prompt:... or Tav create a server — administrators only; preview before building. /create status retrieves progress.
 **Utility:** /help, /ping, /invite; Tav tag Marlow (members or bots)
 **Quiz:** Administrators/server owner: Tav start a quiz 10 questions (omit the count and I’ll ask); /quiz start, /quiz questions, /quiz leaderboard, /quiz stop, /quiz results — 150 built-in questions and private answer feedback.
@@ -77,6 +82,7 @@ function safeError(error) {
 client.once(Events.ClientReady,async ready=>{
   try {
     await register(ready.user.id);
+    await economy.recover(ready);
     await quiz.recover(ready);
     await builder.recover(ready);
     commandsReady=true;
@@ -88,6 +94,7 @@ client.once(Events.ClientReady,async ready=>{
   } catch(error) {console.error('Command registration failed:',error.code || error.name);shutdown(1);}
 });
 client.on(Events.InteractionCreate,async i=>{
+  if(await economy.handle(i)) return;
   if(await builder.handle(i)) return;
   if(await quiz.handle(i)) return;
   if(!i.isChatInputCommand() || !i.inGuild()) return;
@@ -160,7 +167,7 @@ client.on(Events.Error,error=>console.error('Discord connection error:',error.co
 let stopping=false;
 function shutdown(code=0) {
   if(stopping)return;stopping=true;commandsReady=false;
-  builder.shutdown();quiz.shutdown();client.destroy();close();server.close(()=>process.exit(code));
+  economy.shutdown();builder.shutdown();quiz.shutdown();client.destroy();close();server.close(()=>process.exit(code));
   setTimeout(()=>process.exit(code),3000).unref();
 }
 process.on('SIGTERM',()=>shutdown());process.on('SIGINT',()=>shutdown());

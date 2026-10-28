@@ -22,14 +22,14 @@ function navigation(prefix,p,extra=[]) {
   return [row([button(`${prefix}:${p.page-1}`,'Previous',p.page===0),button(`${prefix}:${p.page+1}`,'Next',p.page===p.pages-1),...extra])];
 }
 const medal=n=>({1:'🥇',2:'🥈',3:'🥉'}[n] || `${n}.`);
-export function resultsView({session:s,players},page=0) {
+export function resultsView({session:s,players,currency},page=0) {
   const p=paginate(players.length,page);
   const status={completed:'Completed',cancelled:'Cancelled',interrupted:'Interrupted by restart',failed:'Stopped due to an error'}[s.status] || s.status;
   return {embeds:[{color:s.status==='completed'?blue:0xd49a32,title:`TAVRENIQ • Quiz ${status}`,
     description:`**${s.played}/${s.questions.length} questions played • ${players.length} participants**\n`+
       (s.status==='completed'?'Scores saved to this server’s leaderboard.':'Partial results only; excluded from the leaderboard.')+'\n\n'+
       (players.slice(p.start,p.end).map(r=>`${medal(r.place)} **${clean(r.name)}** (<@${r.user}>) — **${r.score} pts**\n`+
-        `Answered ${r.answered} • Correct ${r.correct} • Incorrect ${r.incorrect} • Unanswered ${r.unanswered} • Accuracy ${r.accuracy.toFixed(1)}%`).join('\n\n') || 'No answers were submitted.'),
+        `Answered ${r.answered} • Correct ${r.correct} • Incorrect ${r.incorrect} • Unanswered ${r.unanswered} • Accuracy ${r.accuracy.toFixed(1)}%${currency?` • Earned ${currency.emoji} ${r.earnings||0} ${clean(currency.name)}`:''}`).join('\n\n') || 'No answers were submitted.'),
     footer:{text:`Page ${p.page+1}/${p.pages} • Rank: score, then accuracy; exact ties share rank. Accuracy = correct / answered.`}}],
     components:navigation(`tq:r:${s.id}`,p,s.played?[button(`tq:v:${s.id}:0`,'Review answers')]:[]),allowedMentions:noMentions};
 }
