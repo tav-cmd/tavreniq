@@ -7,6 +7,13 @@ const base = (name,description,perm) => {
 const user = c => c.addUserOption(o=>o.setName('user').setDescription('Target member').setRequired(true));
 const reason = c => c.addStringOption(o=>o.setName('reason').setDescription('Reason for this action').setMaxLength(400));
 export const commands = [
+  base('quiz','Play TAVRENIQ multiplayer quizzes')
+    .addSubcommand(c=>c.setName('start').setDescription('Start a quiz immediately')
+      .addIntegerOption(o=>o.setName('number_of_questions').setDescription('Number of unique questions (1–150)').setRequired(true).setMinValue(1).setMaxValue(150)))
+    .addSubcommand(c=>c.setName('questions').setDescription('View question count and how to play'))
+    .addSubcommand(c=>c.setName('leaderboard').setDescription('View this server’s persistent quiz rankings'))
+    .addSubcommand(c=>c.setName('stop').setDescription('Cancel the active quiz (starter or moderator)'))
+    .addSubcommand(c=>c.setName('results').setDescription('Retrieve the latest finished quiz in this channel')),
   base('help','View commands and chat instructions'),
   base('ping','Check bot latency'),
   base('invite','Get the bot invite link'),
@@ -22,3 +29,4 @@ export const commands = [
   base('purge','Delete recent messages (under 14 days old)',P.ManageMessages).addIntegerOption(o=>o.setName('count').setDescription('Number of messages').setMinValue(1).setMaxValue(100).setRequired(true)),
   reason(user(base('role','Add or remove a non-administrative role',P.ManageRoles)).addRoleOption(o=>o.setName('role').setDescription('Role to change').setRequired(true)).addStringOption(o=>o.setName('action').setDescription('Operation').setRequired(true).addChoices({name:'Add',value:'add'},{name:'Remove',value:'remove'})))
 ].map(c=>c.toJSON());
+

@@ -100,3 +100,83 @@ The app uses Node's built-in SQLite module (some Node versions print an experime
 The included tests cover duration validation, hierarchy protections, exact text command parsing, slash-command schema ordering, and moderation authorization. Installation and local checks do not replace a live Discord/Gemini smoke test after you supply credentials.
 
 References: https://discord.js.org/docs/packages/discord.js/14.27.0 • https://docs.discord.com/developers/topics/gateway • https://ai.google.dev/api/generate-content
+
+
+## Multiplayer quiz
+
+TAVRENIQ includes exactly **150 built-in questions**, ten each in 15 topics. No AI
+key, extra dependency, privileged member intent, or manual question entry is needed.
+Existing moderation, AI, tagging and custom presence remain available.
+
+### Commands
+
+- `/quiz start number_of_questions:10` — start immediately; choose 1–150.
+- `/quiz questions` — view the bank size and instructions.
+- `/quiz leaderboard` — server-wide lifetime totals from completed quizzes.
+- `/quiz stop` — cancel; available to the starter or a member with Moderate Members
+  or Manage Server (including administrators).
+- `/quiz results` — retrieve the latest finished quiz in this channel, even after
+  restart or if Discord could not receive the original results message.
+
+Click A/B/C/D to join; no lobby or category selection. Each user submits once per
+question. Both questions and answer choices are shuffled using cryptographic
+randomness, without repeating a question in a session. Separate channels and
+servers have independent sessions, with one active session per channel.
+
+### Scoring and privacy
+
+Correct = 1 point; incorrect or missed = 0. A participant is someone who submits
+at least one answer. Late joiners can play immediately; earlier questions count
+as unanswered. Accuracy is correct / answered, not correct / questions played.
+Rank by score, then unrounded accuracy. Equal score and accuracy share competition
+rank (1, 1, 3); user ID orders tied rows consistently without changing their rank.
+
+Answer clicks receive **ephemeral feedback only**. Shared buttons never reveal a
+correct option or a player's choice, even when disabled. Answers are checked on
+the server. Review becomes available only after the whole session ends and shows
+question answer keys, never another player's selected choices. Results display
+score, answered/correct/incorrect/unanswered counts and accuracy, eight players
+per page. Reviews show one question per page. Pagination opens privately.
+
+### Hosting and persistence
+
+1. Pull the latest `main` and restart. Bot-Hosting's **Auto-pull at restart** can do
+   this. Entry file remains `src/index.js`; use Node 24 (minimum 22.13).
+2. Allow View Channel, Send Messages and Embed Links in quiz channels. Threads
+   also need Send Messages in Threads. Read Message History lets the bot remove
+   expired buttons after restart.
+3. Slash commands register automatically at startup. No extra tokens are needed.
+4. Optional `QUIZ_SECONDS=20` sets 5–120 seconds per question. Restart to apply.
+5. Keep `DATA_DIR` persistent and back up `tavreniq.sqlite` using a SQLite-aware
+   backup or while the bot is stopped (WAL files matter during live copies).
+
+Quizzes use the existing SQLite database, with new `quiz_sessions` and
+`quiz_answers` tables. A database uniqueness constraint prevents duplicate
+answers and overlapping sessions. Each accepted answer is saved before feedback.
+Completed status and leaderboard eligibility are committed before public results
+are sent. Cancelled, failed and interrupted sessions retain partial results but
+never count toward leaderboards. The in-progress question counts as played once
+its buttons have been activated. Unopened questions do not count.
+
+On restart, previously active quizzes are marked **Interrupted by restart** and
+receive a notice where channel permissions allow. They do not resume. Old answer
+buttons are rejected; historical result/review buttons keep working. Run one bot
+process per database; do not run multiple replicas sharing this SQLite file.
+Discord.js manages REST rate-limit queues and retries. Interaction acknowledgements
+are sent before network work; long quizzes use channel messages rather than
+expiring slash-command tokens. If a channel disappears or sends fail, the quiz is
+stopped, its partial records retained, and its timer cleaned up.
+
+### Verification
+
+Run `npm ci`, `npm run check`, and `npm test` on Node 24. Automated tests use real
+SQLite databases and mocked Discord interactions/time. They cover 1/10/50/150
+questions, concurrent players, duplicate submissions, private-only feedback,
+late joins, scoring/ties, isolation, cancellation, timers, persistence/restarts,
+expired interactions, permission/API failures, embed pagination and slash-command
+payloads. These tests do not make live Discord calls.
+
+After deploying, run `/quiz questions`, then `/quiz start number_of_questions:1`
+with two human accounts. Confirm each account sees only its own feedback, wait
+for results, open Review answers, and check `/quiz leaderboard`. The console
+should report command registration and `TAVRENIQ online`.
